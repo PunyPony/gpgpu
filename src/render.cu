@@ -2,6 +2,7 @@
 #include <spdlog/spdlog.h>
 #include <cassert>
 #include <iostream>
+#include <stdio.h>
 #include <time.h>
 #include <float.h>
 #include "vec.hpp"
@@ -67,28 +68,33 @@ __device__ vec3 color(const ray& r, hitable **world) {
 
 // Device code
 __global__ void mykernel(char* buffer, int width, int height, size_t pitch, 
-    vec3 lower_left_corner, vec3 horizontal, vec3 vertical, vec3 origin, hitable **world)
+    vec3 lower_left_corner, 
+    vec3 horizontal, 
+    vec3 vertical, 
+    vec3 origin, 
+    hitable **world)
 {
-  float denum = width * width + height * height;
-
   int x = blockDim.x * blockIdx.x + threadIdx.x;
   int y = blockDim.y * blockIdx.y + threadIdx.y;
 
   if (x >= width || y >= height)
     return;
 
+  float denum = width * width + height * height;
   uchar4*  lineptr = (uchar4*)(buffer + y * pitch);
+  
   float u = float(x) / float(width);
   float v = float(y) / float(height);
 
-  ray r(origin, lower_left_corner + u*horizontal + v*vertical);
-  vec3 color = color(r, world);
-  lineptr[x] = {color.r(), color.g(), color.b(), 255};
+  ray r = ray(origin, lower_left_corner + u*horizontal + v*vertical);
+  vec3 c = color(r, world);
+  //printf("%f", c.r());
+  lineptr[x] = {c.r(), c.g(), c.b(), 255};
 }
 
 void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
 {
-  cudaError_t rc = cudaSuccess;
+  //cudaError_t rc = cudaSuccess;
 
   // Allocate device memory
   char*  devBuffer;
@@ -100,17 +106,20 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
   checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
   create_world<<<1,1>>>(d_list,d_world);
   
+   checkCudaErrors(cudaMallocPitch(&devBuffer, &pitch, width *
+        sizeof(rgba8_t), height));
+  
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
 
-  checkCudaErrors(cudaMallocPitch(&devBuffer, &pitch, width *
-        sizeof(rgba8_t), height));
+
+
   // Run the kernel with blocks of size 64 x 64
   {
-    int bsize = 64;
+    int bsize = 32;
     int w     = std::ceil((float)width / bsize);
     int h     = std::ceil((float)height / bsize);
-
+    
     spdlog::debug("running kernel of size ({},{})", w, h);
 
     dim3 dimBlock(bsize, bsize);
@@ -123,15 +132,14 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
     vec3(0.0, 0.0, 0.0),
     d_world);
 
-    if (cudaPeekAtLastError())
-      abortError("Computation Error");
+    checkCudaErrors(cudaDeviceSynchronize());
+    checkCudaErrors(cudaGetLastError());
   }
 
   // Copy back to main memory
   checkCudaErrors(cudaMemcpy2D(hostBuffer, stride, devBuffer, pitch, width
         * sizeof(rgba8_t), height, cudaMemcpyDeviceToHost));
   // Free
-  
   checkCudaErrors(cudaDeviceSynchronize());
   free_world<<<1,1>>>(d_list,d_world);
   checkCudaErrors(cudaGetLastError());

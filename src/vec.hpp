@@ -12,9 +12,9 @@ public:
     __host__ __device__ inline float x() const { return e[0]; }
     __host__ __device__ inline float y() const { return e[1]; }
     __host__ __device__ inline float z() const { return e[2]; }
-    __host__ __device__ inline float r() const { return e[0]; }
-    __host__ __device__ inline float g() const { return e[1]; }
-    __host__ __device__ inline float b() const { return e[2]; }
+    __host__ __device__ inline uint8_t r() const { return e[0]*255; }
+    __host__ __device__ inline uint8_t  g() const { return e[1]*255; }
+    __host__ __device__ inline uint8_t  b() const { return e[2]*255; }
 
     __host__ __device__ inline const vec3& operator+() const { return *this; }
     __host__ __device__ inline vec3 operator-() const { return vec3(-e[0], -e[1], -e[2]); }
