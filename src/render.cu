@@ -4,7 +4,7 @@
 #include <iostream>
 #include <time.h>
 #include <float.h>
-#include "vec3.hpp"
+#include "vec.hpp"
 #include "ray.hpp"
 #include "sphere.hpp"
 #include "hitable_list.hpp"
@@ -115,7 +115,13 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
 
     dim3 dimBlock(bsize, bsize);
     dim3 dimGrid(w, h);
-    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch);
+
+    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch,
+    vec3(-2.0, -1.0, -1.0),
+    vec3(4.0, 0.0, 0.0),
+    vec3(0.0, 2.0, 0.0),
+    vec3(0.0, 0.0, 0.0),
+    d_world);
 
     if (cudaPeekAtLastError())
       abortError("Computation Error");
