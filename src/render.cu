@@ -80,8 +80,7 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   if (x >= width || y >= height)
     return;
 
-  float denum = width * width + height * height;
-  uchar4*  lineptr = (uchar4*)(buffer + y * pitch);
+  uchar4*  lineptr = (uchar4*)(buffer + (height-y) * pitch);
   
   float u = float(x) / float(width);
   float v = float(y) / float(height);
