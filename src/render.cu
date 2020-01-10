@@ -1,6 +1,14 @@
 #include "render.hpp"
 #include <spdlog/spdlog.h>
 #include <cassert>
+#include <iostream>
+#include <time.h>
+#include <float.h>
+#include "vec3.hpp"
+#include "ray.hpp"
+#include "sphere.hpp"
+#include "hitable_list.hpp"
+
 
 [[gnu::noinline]]
 void _abortError(const char* msg, const char* fname, int line)
@@ -31,17 +39,35 @@ struct rgba8_t {
   std::uint8_t a;
 };
 
-__device__ vec3 color(const ray& r) {
-    vec3 unit_direction = unit_vector(r.direction());
-    float t = 0.5f*(unit_direction.y() + 1.0f);
-    return (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
+__global__ void create_world(hitable **d_list, hitable **d_world) {
+    if (threadIdx.x == 0 && blockIdx.x == 0) {
+        *(d_list)   = new sphere(vec3(0,0,-1), 0.5);
+        *(d_list+1) = new sphere(vec3(0,-100.5,-1), 100);
+        *d_world    = new hitable_list(d_list,2);
+    }
 }
 
+__global__ void free_world(hitable **d_list, hitable **d_world) {
+    delete *(d_list);
+    delete *(d_list+1);
+    delete *d_world;
+}
 
+__device__ vec3 color(const ray& r, hitable **world) {
+    hit_record rec;
+    if ((*world)->hit(r, 0.0, FLT_MAX, rec)) {
+        return 0.5f*vec3(rec.normal.x()+1.0f, rec.normal.y()+1.0f, rec.normal.z()+1.0f);
+    }
+    else {
+        vec3 unit_direction = unit_vector(r.direction());
+        float t = 0.5f*(unit_direction.y() + 1.0f);
+        return (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
+    }
+}
 
 // Device code
 __global__ void mykernel(char* buffer, int width, int height, size_t pitch, 
-    vec3 lower_left_corner, vec3 horizontal, vec3 vertical, vec3 origin)
+    vec3 lower_left_corner, vec3 horizontal, vec3 vertical, vec3 origin, hitable **world)
 {
   float denum = width * width + height * height;
 
@@ -56,17 +82,26 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   float v = float(y) / float(height);
 
   ray r(origin, lower_left_corner + u*horizontal + v*vertical);
-  vec3 color = color(r);
+  vec3 color = color(r, world);
   lineptr[x] = {color.r(), color.g(), color.b(), 255};
 }
 
-void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride, int n_iterations)
+void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
 {
   cudaError_t rc = cudaSuccess;
 
   // Allocate device memory
   char*  devBuffer;
   size_t pitch;
+ 
+  hitable **d_list;
+  checkCudaErrors(cudaMalloc((void **)&d_list, 2*sizeof(hitable *)));
+  hitable **d_world;
+  checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
+  create_world<<<1,1>>>(d_list,d_world);
+  
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
 
   checkCudaErrors(cudaMallocPitch(&devBuffer, &pitch, width *
         sizeof(rgba8_t), height));
@@ -90,5 +125,12 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride, int 
   checkCudaErrors(cudaMemcpy2D(hostBuffer, stride, devBuffer, pitch, width
         * sizeof(rgba8_t), height, cudaMemcpyDeviceToHost));
   // Free
+  
+  checkCudaErrors(cudaDeviceSynchronize());
+  free_world<<<1,1>>>(d_list,d_world);
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaFree(d_list));
+  checkCudaErrors(cudaFree(d_world));
   checkCudaErrors(cudaFree(devBuffer));
+  cudaDeviceReset();
 }

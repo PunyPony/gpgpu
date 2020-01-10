@@ -79,11 +79,9 @@ int main(int argc, char** argv)
   int stride = width * kRGBASize;
   auto buffer = std::make_unique<std::byte[]>(height * stride);
 
-
-
   // Rendering
   spdlog::info("Runnging {} mode with (w={},h={},niter={}).", mode, width, height, niter);
-  render(reinterpret_cast<char*>(buffer.get()), width, height, stride, niter);
+  render(reinterpret_cast<char*>(buffer.get()), width, height, stride);
 
   // Save
   write_png(buffer.get(), width, height, stride, filename.c_str());
