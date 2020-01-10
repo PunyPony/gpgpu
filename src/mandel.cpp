@@ -74,9 +74,12 @@ int main(int argc, char** argv)
   CLI11_PARSE(app, argc, argv);*/
 
   // Create buffer
+  //constexpr unsigned num_pixels = width * height
   constexpr int kRGBASize = 4;
   int stride = width * kRGBASize;
   auto buffer = std::make_unique<std::byte[]>(height * stride);
+
+
 
   // Rendering
   spdlog::info("Runnging {} mode with (w={},h={},niter={}).", mode, width, height, niter);
