@@ -8,9 +8,11 @@
 #include "vec.hpp"
 #include "ray.hpp"
 #include "sphere.hpp"
+#include "camera.hpp"
 #include "hitable_list.hpp"
+#include <curand_kernel.h>
 
-
+/*
 [[gnu::noinline]]
 void _abortError(const char* msg, const char* fname, int line)
 {
@@ -19,8 +21,11 @@ void _abortError(const char* msg, const char* fname, int line)
   spdlog::error("Error {}: {}", cudaGetErrorName(err), cudaGetErrorString(err));
   std::exit(1);
 }
+*/
+
 
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
+#define abortError(msg) _abortError(msg, __FUNCTION__, __LINE__)
 void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line) {
     if (result) {
         std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
@@ -30,7 +35,17 @@ void check_cuda(cudaError_t result, char const *const func, const char *const fi
         exit(99);
     }
 }
-#define abortError(msg) _abortError(msg, __FUNCTION__, __LINE__)
+
+
+
+#define RANDVEC3 vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),curand_uniform(local_rand_state))
+__device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
+    vec3 p;
+    do {
+        p = 2.0f*RANDVEC3 - vec3(1,1,1);
+    } while (p.squared_length() >= 1.0f);
+    return p;
+}
 
 
 struct rgba8_t {
@@ -40,20 +55,24 @@ struct rgba8_t {
   std::uint8_t a;
 };
 
-__global__ void create_world(hitable **d_list, hitable **d_world) {
+__global__ void create_world(hitable **d_list, hitable **d_world, camera
+**d_camera) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         *(d_list)   = new sphere(vec3(0,0,-1), 0.5);
         *(d_list+1) = new sphere(vec3(0,-100.5,-1), 100);
         *d_world    = new hitable_list(d_list,2);
+        *d_camera   = new camera();
     }
 }
 
-__global__ void free_world(hitable **d_list, hitable **d_world) {
+__global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) {
     delete *(d_list);
     delete *(d_list+1);
     delete *d_world;
+    delete *d_camera;
 }
 
+/*
 __device__ vec3 color(const ray& r, hitable **world) {
     hit_record rec;
     if ((*world)->hit(r, 0.0, FLT_MAX, rec)) {
@@ -64,15 +83,42 @@ __device__ vec3 color(const ray& r, hitable **world) {
         float t = 0.5f*(unit_direction.y() + 1.0f);
         return (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
     }
+}*/
+
+//max depth 50
+__device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_state) {
+   ray cur_ray = r;
+   float cur_attenuation = 1.0f;
+   for(int i = 0; i < 50; i++) {
+      hit_record rec;
+      if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+         vec3 target = rec.p + rec.normal + random_in_unit_sphere(local_rand_state);
+         cur_attenuation *= 0.5f;
+         cur_ray = ray(rec.p, target-rec.p);
+      }
+      else {
+           vec3 unit_direction = unit_vector(cur_ray.direction());
+           float t = 0.5f*(unit_direction.y() + 1.0f);
+           vec3 c = (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
+           return cur_attenuation * c;
+        }
+      }
+   return vec3(0.0,0.0,0.0); // exceeded recursion
 }
+
+__global__ void render_init(int max_x, int max_y, curandState *rand_state) {
+    int i = threadIdx.x + blockIdx.x * blockDim.x;
+    int j = threadIdx.y + blockIdx.y * blockDim.y;
+    if((i >= max_x) || (j >= max_y)) return;
+    int pixel_index = j*max_x + i;
+    //Each thread gets same seed, a different sequence number, no offset
+    curand_init(0, pixel_index, 0, &rand_state[pixel_index]);
+}
+
 
 // Device code
 __global__ void mykernel(char* buffer, int width, int height, size_t pitch, 
-    vec3 lower_left_corner, 
-    vec3 horizontal, 
-    vec3 vertical, 
-    vec3 origin, 
-    hitable **world)
+    int ns, camera **cam, hitable **world, curandState *rand_state)
 {
   int x = blockDim.x * blockIdx.x + threadIdx.x;
   int y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -81,29 +127,41 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
     return;
 
   uchar4*  lineptr = (uchar4*)(buffer + (height-y) * pitch);
-  
-  float u = float(x) / float(width);
-  float v = float(y) / float(height);
 
-  ray r = ray(origin, lower_left_corner + u*horizontal + v*vertical);
-  vec3 c = color(r, world);
-  //printf("%f", c.r());
+  curandState local_rand_state = rand_state[y*width + x];
+  vec3 col(0,0,0);
+  for(int s=0; s < ns; s++) {
+    float u = float(x + curand_uniform(&local_rand_state)) / float(width);
+    float v = float(y + curand_uniform(&local_rand_state)) / float(height);
+    ray r = (*cam)->get_ray(u,v);
+    col += color(r, world, &local_rand_state);
+  }
+  //const ray& r, hitable **world, curandState *local_rand_state
+
+  vec3 c = col/float(ns);
   lineptr[x] = {c.r(), c.g(), c.b(), 255};
 }
 
-void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
+void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std::ptrdiff_t stride)
 {
   //cudaError_t rc = cudaSuccess;
 
   // Allocate device memory
   char*  devBuffer;
   size_t pitch;
- 
+
+  // allocate random state
+  curandState *d_rand_state;
+  checkCudaErrors(cudaMalloc((void **)&d_rand_state, width*height*sizeof(curandState)));
+
+  // make our world of hitables & the camera
   hitable **d_list;
   checkCudaErrors(cudaMalloc((void **)&d_list, 2*sizeof(hitable *)));
   hitable **d_world;
   checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
-  create_world<<<1,1>>>(d_list,d_world);
+  camera **d_camera;
+  checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
+  create_world<<<1,1>>>(d_list,d_world,d_camera);
   
    checkCudaErrors(cudaMallocPitch(&devBuffer, &pitch, width *
         sizeof(rgba8_t), height));
@@ -111,9 +169,8 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
 
-
-
-  // Run the kernel with blocks of size 64 x 64
+  printf("allocate\n");
+  // Run the kernel with blocks of size bsize*bsize
   {
     int bsize = 32;
     int w     = std::ceil((float)width / bsize);
@@ -124,12 +181,15 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
     dim3 dimBlock(bsize, bsize);
     dim3 dimGrid(w, h);
 
-    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch,
-    vec3(-2.0, -1.0, -1.0),
-    vec3(4.0, 0.0, 0.0),
-    vec3(0.0, 2.0, 0.0),
-    vec3(0.0, 0.0, 0.0),
-    d_world);
+    printf("random init\n");
+    render_init<<<dimBlock, dimGrid>>>(width, height, d_rand_state);
+    
+    checkCudaErrors(cudaGetLastError());
+    checkCudaErrors(cudaDeviceSynchronize());
+
+    printf("raytracing\n");
+    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch, 
+       ns, d_camera, d_world, d_rand_state);
 
     checkCudaErrors(cudaDeviceSynchronize());
     checkCudaErrors(cudaGetLastError());
@@ -139,11 +199,16 @@ void render(char* hostBuffer, int width, int height, std::ptrdiff_t stride)
   checkCudaErrors(cudaMemcpy2D(hostBuffer, stride, devBuffer, pitch, width
         * sizeof(rgba8_t), height, cudaMemcpyDeviceToHost));
   // Free
-  checkCudaErrors(cudaDeviceSynchronize());
-  free_world<<<1,1>>>(d_list,d_world);
-  checkCudaErrors(cudaGetLastError());
-  checkCudaErrors(cudaFree(d_list));
-  checkCudaErrors(cudaFree(d_world));
+  checkCudaErrors(cudaDeviceSynchronize()); // ?
+
+  free_world<<<1,1>>>(d_list,d_world,d_camera);
   checkCudaErrors(cudaFree(devBuffer));
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaFree(d_camera));
+  checkCudaErrors(cudaFree(d_world));
+  checkCudaErrors(cudaFree(d_list));
+  checkCudaErrors(cudaFree(d_rand_state));
+
+  // useful for cuda-memcheck --leak-check full
   cudaDeviceReset();
 }

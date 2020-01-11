@@ -59,10 +59,10 @@ int main(int argc, char** argv)
   (void) argv;
 
   std::string filename = "output.png";
-  std::string mode = "GPU";
-  int width = 4800;
-  int height = 3200;
-  int niter = 100;
+  //std::string mode = "GPU";
+  unsigned width = 1200;
+  unsigned height = 600;
+  unsigned ns = 100;
 
   /*CLI::App app{"mandel"};
   app.add_option("-o", filename, "Output image");
@@ -80,8 +80,8 @@ int main(int argc, char** argv)
   auto buffer = std::make_unique<std::byte[]>(height * stride);
 
   // Rendering
-  spdlog::info("Runnging {} mode with (w={},h={},niter={}).", mode, width, height, niter);
-  render(reinterpret_cast<char*>(buffer.get()), width, height, stride);
+  spdlog::info("Runnging with (w={},h={},ns={}).", width, height, ns);
+  render(reinterpret_cast<char*>(buffer.get()), width, height, ns, stride);
 
   // Save
   write_png(buffer.get(), width, height, stride, filename.c_str());
