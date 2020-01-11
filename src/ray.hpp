@@ -1,5 +1,4 @@
-#ifndef RAYH
-#define RAYH
+#pragma once
 #include "vec.hpp"
 
 class ray
@@ -15,4 +14,3 @@ class ray
         vec3 B;
 };
 
-#endif

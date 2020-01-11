@@ -1,6 +1,4 @@
-#ifndef CAMERAH
-#define CAMERAH
-
+#pragma once
 #include "ray.hpp"
 
 class camera {
@@ -19,4 +17,3 @@ class camera {
         vec3 vertical;
 };
 
-#endif
