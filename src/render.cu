@@ -56,29 +56,48 @@ struct rgba8_t {
   std::uint8_t a;
 };
 
-__global__ void create_world(hitable **d_list, hitable **d_world, camera **d_camera) {
+__global__ void create_world(hitable **d_list, hitable **d_world, camera
+    **d_camera, unsigned width, unsigned height) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        d_list[0] = new sphere(vec3(0,0,-1), 0.5,
-                               new lambertian(vec3(0.8, 0.3, 0.3)));
-        d_list[1] = new sphere(vec3(0,-100.5,-1), 100,
-                               new lambertian(vec3(0.8, 0.8, 0.0)));
-        d_list[2] = new sphere(vec3(1,0,-1), 0.5,
-                               new metal(vec3(0.8, 0.6, 0.2), 1.0));
-        d_list[3] = new sphere(vec3(-1,0,-1), 0.5,
-                               new metal(vec3(0.8, 0.8, 0.8), 0.3));
-        *d_world  = new hitable_list(d_list,4);
-        *d_camera = new camera();
+        d_list[0] = new sphere(vec3(0,0,0), 0.5,
+                                new lambertian(vec3(0.1, 0.2, 0.5)));
+        d_list[1] = new sphere(vec3(0,-100.5,0), 100,
+                                new lambertian(vec3(0.78, 0.18, 0.4)));
+
+        d_list[2] = new sphere(vec3(1,1,0), 0.5,
+                               new lambertian(vec3(0.1, 0.8, 0.4)));
+
+
+        d_list[3] = new sphere(vec3(1,0,0), 0.5,
+                                new metal(vec3(0.8, 0.6, 0.2), 0.0));
+        d_list[4] = new sphere(vec3(0,1,0), 0.5,
+                                 new dielectric(1.5));
+
+        *d_world = new hitable_list(d_list,5);
+        
+        vec3 lookfrom(0,1,2);
+        vec3 lookat(0.5,0,0);
+        float dist_to_focus = 10.0; (lookfrom-lookat).length();
+        float aperture = 0.;
+        *d_camera = new camera(lookfrom,
+                                 lookat,
+                                 vec3(0,1,0),
+                                 100.0,
+                                 float(width)/float(height),
+                                 aperture,
+                                 dist_to_focus);
     }
 }
 
 __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) {
-    for(int i=0; i < 4; i++) {
+    for(int i=0; i < 5; i++) {
         delete ((sphere *)d_list[i])->mat_ptr;
         delete d_list[i];
     }
     delete *d_world;
     delete *d_camera;
 }
+
 
 /*
    __device__ vec3 color(const ray& r, hitable **world) {
@@ -147,7 +166,7 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   for(int s=0; s < ns; s++) {
     float u = float(x + curand_uniform(&local_rand_state)) / float(width);
     float v = float(y + curand_uniform(&local_rand_state)) / float(height);
-    ray r = (*cam)->get_ray(u,v);
+    ray r = (*cam)->get_ray(u,v, &local_rand_state);
     col += color(r, world, &local_rand_state);
   }
   //const ray& r, hitable **world, curandState *local_rand_state
@@ -170,12 +189,12 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std:
 
   // make our world of hitables & the camera
   hitable **d_list;
-  checkCudaErrors(cudaMalloc((void **)&d_list, 2*sizeof(hitable *)));
+  checkCudaErrors(cudaMalloc((void **)&d_list, 5*sizeof(hitable *)));
   hitable **d_world;
   checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
   camera **d_camera;
   checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-  create_world<<<1,1>>>(d_list,d_world,d_camera);
+  create_world<<<1,1>>>(d_list,d_world,d_camera, width, height);
 
   checkCudaErrors(cudaMallocPitch(&devBuffer, &pitch, width *
         sizeof(rgba8_t), height));
