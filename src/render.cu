@@ -73,11 +73,16 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
         d_list[4] = new sphere(vec3(0,1,0), 0.5,
                                  new dielectric(1.5));
 
-        d_list[5] = new triangle(vec3(0,0,1), vec3(0,1,1), vec3(2,0,1),
+        d_list[5] = new triangle(vec3(0,0,1), vec3(0,1,1), vec3(1,0,1),
                                new lambertian(vec3(1.0, 0.0, 0.0)));
 
+/*
+        d_list[5] = new sphere(vec3(0,0,1), 0.25,
+                               new lambertian(vec3(1.0, 0.0, 0.0)));
+*/
 
-        d_list[6] = new triangle(vec3(60,0,0), vec3(0,60,0), vec3(60,60,0),
+
+        d_list[6] = new triangle(vec3(3,0,1), vec3(0,1,1), vec3(1,0,1),
                                 new metal(vec3(0.8, 0.6, 0.2), 0.2));
         d_list[7] = new triangle(vec3(0,10,0), vec3(10,0,0), vec3(10,10,0),
                                  new dielectric(1.5));
@@ -138,6 +143,7 @@ __device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_sta
       if(rec.mat_ptr->scatter(cur_ray, rec, attenuation, scattered, local_rand_state)) {
         cur_attenuation *= attenuation;
         cur_ray = scattered;
+
       }
       else {
         return vec3(0.0,0.0,0.0);
