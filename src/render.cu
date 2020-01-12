@@ -73,8 +73,8 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
         d_list[4] = new sphere(vec3(0,1,0), 0.5,
                                  new dielectric(1.5));
 
-        d_list[5] = new triangle(vec3(200,0,0), vec3(0,2,0), vec3(200,2,0),
-                               new lambertian(vec3(0.1, 0.8, 0.4)));
+        d_list[5] = new triangle(vec3(0,0,1), vec3(0,1,1), vec3(2,0,1),
+                               new lambertian(vec3(1.0, 0.0, 0.0)));
 
 
         d_list[6] = new triangle(vec3(60,0,0), vec3(0,60,0), vec3(60,60,0),
@@ -85,8 +85,8 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
 
         *d_world = new hitable_list(d_list,8);
         
-        vec3 lookfrom(0,1,2);
-        vec3 lookat(0.5,0,0);
+        vec3 lookfrom(0, 0, 2);
+        vec3 lookat(0,0,0);
         float dist_to_focus = 10.0; (lookfrom-lookat).length();
         float aperture = 0.;
         *d_camera = new camera(lookfrom,

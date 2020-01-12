@@ -24,6 +24,9 @@ __device__ bool triangle::hit(const ray& r, float t_min, float t_max, hit_record
     auto orig = r.origin();
 
     float t = (dot(N,orig) + d) / dot(N,dir);
+
+    float a = dot(r.direction(), r.direction());
+    t = abs(t / a);
     vec3 P = orig +t *dir;
     // egde 0
     vec3 edge0 = v1 - v0;
@@ -45,8 +48,7 @@ __device__ bool triangle::hit(const ray& r, float t_min, float t_max, hit_record
     C = cross(edge2,vp2);
 
     if (dot(N,C) < 0  ) return false;
-    float a = dot(r.direction(), r.direction());
-    t = abs(t / a);
+
 
     if (t < t_max && t > t_min) {
 
