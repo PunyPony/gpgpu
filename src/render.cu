@@ -12,7 +12,7 @@
 #include "hitable_list.hpp"
 #include <curand_kernel.h>
 #include "material.hpp"
-
+# include "triangle.hpp"
 /*
    [[gnu::noinline]]
    void _abortError(const char* msg, const char* fname, int line)
@@ -69,11 +69,21 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
 
 
         d_list[3] = new sphere(vec3(1,0,0), 0.5,
-                                new metal(vec3(0.8, 0.6, 0.2), 0.0));
+                                new metal(vec3(0.8, 0.6, 0.2), 0.2));
         d_list[4] = new sphere(vec3(0,1,0), 0.5,
                                  new dielectric(1.5));
 
-        *d_world = new hitable_list(d_list,5);
+        d_list[5] = new triangle(vec3(200,0,0), vec3(0,2,0), vec3(200,2,0),
+                               new lambertian(vec3(0.1, 0.8, 0.4)));
+
+
+        d_list[6] = new triangle(vec3(60,0,0), vec3(0,60,0), vec3(60,60,0),
+                                new metal(vec3(0.8, 0.6, 0.2), 0.2));
+        d_list[7] = new triangle(vec3(0,10,0), vec3(10,0,0), vec3(10,10,0),
+                                 new dielectric(1.5));
+
+
+        *d_world = new hitable_list(d_list,8);
         
         vec3 lookfrom(0,1,2);
         vec3 lookat(0.5,0,0);
@@ -92,6 +102,10 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
 __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) {
     for(int i=0; i < 5; i++) {
         delete ((sphere *)d_list[i])->mat_ptr;
+        delete d_list[i];
+    }
+    for(int i=5; i < 8; i++) {
+        delete ((triangle *)d_list[i])->mat_ptr;
         delete d_list[i];
     }
     delete *d_world;
@@ -189,7 +203,7 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std:
 
   // make our world of hitables & the camera
   hitable **d_list;
-  checkCudaErrors(cudaMalloc((void **)&d_list, 5*sizeof(hitable *)));
+  checkCudaErrors(cudaMalloc((void **)&d_list, 8*sizeof(hitable *)));
   hitable **d_world;
   checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
   camera **d_camera;
