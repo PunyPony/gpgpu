@@ -13,17 +13,6 @@
 #include <curand_kernel.h>
 #include "material.hpp"
 # include "triangle.hpp"
-/*
-   [[gnu::noinline]]
-   void _abortError(const char* msg, const char* fname, int line)
-   {
-   cudaError_t err = cudaGetLastError();
-   spdlog::error("{} ({}, line: {})", msg, fname, line);
-   spdlog::error("Error {}: {}", cudaGetErrorName(err), cudaGetErrorString(err));
-   std::exit(1);
-   }
- */
-
 
 #define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
 #define abortError(msg) _abortError(msg, __FUNCTION__, __LINE__)
@@ -36,17 +25,6 @@ void check_cuda(cudaError_t result, char const *const func, const char *const fi
     exit(99);
   }
 }
-
-
-/*
-#define RANDVEC3 vec3(curand_uniform(local_rand_state),curand_uniform(local_rand_state),curand_uniform(local_rand_state))
-__device__ vec3 random_in_unit_sphere(curandState *local_rand_state) {
-  vec3 p;
-  do {
-    p = 2.0f*RANDVEC3 - vec3(1,1,1);
-  } while (p.squared_length() >= 1.0f);
-  return p;
-}*/
 
 
 struct rgba8_t {
@@ -73,26 +51,18 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
         d_list[4] = new sphere(vec3(0,1,0), 0.5,
                                  new dielectric(1.5));
 
-        d_list[5] = new triangle(vec3(0,0,1), vec3(0,1,1), vec3(1,0,1),
-                               new lambertian(vec3(1.0, 0.0, 0.0)));
-
-/*
-        d_list[5] = new sphere(vec3(0,0,1), 0.25,
-                               new lambertian(vec3(1.0, 0.0, 0.0)));
-*/
+        d_list[5] = new triangle(vec3(2,0,0.75), vec3(2,1,0.75),
+            vec3(0.5,0.0,-20), new metal(vec3(1.0, 0.0, 0.0), 0.2));
 
 
-        d_list[6] = new triangle(vec3(3,0,1), vec3(0,1,1), vec3(1,0,1),
-                                new metal(vec3(0.8, 0.6, 0.2), 0.2));
-        d_list[7] = new triangle(vec3(0,10,0), vec3(10,0,0), vec3(10,10,0),
-                                 new dielectric(1.5));
+        d_list[6] = new triangle(vec3(-0.5,-0.25,0.75), vec3(0,0.33,0.75),
+              vec3(0.5,-0.25,0.75), new dielectric(1.3));
 
-
-        *d_world = new hitable_list(d_list,8);
+        *d_world = new hitable_list(d_list,7);
         
         vec3 lookfrom(0, 0, 2);
         vec3 lookat(0,0,0);
-        float dist_to_focus = 10.0; (lookfrom-lookat).length();
+        float dist_to_focus = 10.0; //(lookfrom-lookat).length();
         float aperture = 0.;
         *d_camera = new camera(lookfrom,
                                  lookat,
@@ -109,7 +79,7 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
         delete ((sphere *)d_list[i])->mat_ptr;
         delete d_list[i];
     }
-    for(int i=5; i < 8; i++) {
+    for(int i=5; i < 7; i++) {
         delete ((triangle *)d_list[i])->mat_ptr;
         delete d_list[i];
     }
@@ -118,43 +88,25 @@ __global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camer
 }
 
 
-/*
-   __device__ vec3 color(const ray& r, hitable **world) {
-   hit_record rec;
-   if ((*world)->hit(r, 0.0, FLT_MAX, rec)) {
-   return 0.5f*vec3(rec.normal.x()+1.0f, rec.normal.y()+1.0f, rec.normal.z()+1.0f);
-   }
-   else {
-   vec3 unit_direction = unit_vector(r.direction());
-   float t = 0.5f*(unit_direction.y() + 1.0f);
-   return (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
-   }
-   }*/
-
 //max depth 50
 __device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_state) {
   ray cur_ray = r;
   vec3 cur_attenuation = vec3(1.0,1.0,1.0);
   for(int i = 0; i < 50; i++) {
     hit_record rec;
-    if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) {
+    if ((*world)->hit(cur_ray, 0.001f, FLT_MAX, rec)) 
+    {
       ray scattered;
       vec3 attenuation;
       if(rec.mat_ptr->scatter(cur_ray, rec, attenuation, scattered, local_rand_state)) {
         cur_attenuation *= attenuation;
         cur_ray = scattered;
-
       }
-      else {
+      else
         return vec3(0.0,0.0,0.0);
-      }
     }
-    else {
-      vec3 unit_direction = unit_vector(cur_ray.direction());
-      float t = 0.5f*(unit_direction.y() + 1.0f);
-      vec3 c = (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
-      return cur_attenuation * c;
-    }
+    else
+      return cur_attenuation;
   }
   return vec3(0.0,0.0,0.0); // exceeded recursion
 }
@@ -189,7 +141,6 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
     ray r = (*cam)->get_ray(u,v, &local_rand_state);
     col += color(r, world, &local_rand_state);
   }
-  //const ray& r, hitable **world, curandState *local_rand_state
 
   col = col/float(ns);
   lineptr[x] = {col.r_sqrt(), col.g_sqrt(), col.b_sqrt(), 255};
@@ -209,7 +160,7 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std:
 
   // make our world of hitables & the camera
   hitable **d_list;
-  checkCudaErrors(cudaMalloc((void **)&d_list, 8*sizeof(hitable *)));
+  checkCudaErrors(cudaMalloc((void **)&d_list, 7*sizeof(hitable *)));
   hitable **d_world;
   checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
   camera **d_camera;
