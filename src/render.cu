@@ -131,10 +131,11 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   if (x >= width || y >= height)
     return;
 
-  uchar4*  lineptr = (uchar4*)(buffer + (height-y) * pitch);
+  uchar4*  lineptr = (uchar4*)(buffer + (height-y) * pitch); //reversed 
 
   curandState local_rand_state = rand_state[y*width + x];
   vec3 col(0,0,0);
+  // anti aliasing
   for(int s=0; s < ns; s++) {
     float u = float(x + curand_uniform(&local_rand_state)) / float(width);
     float v = float(y + curand_uniform(&local_rand_state)) / float(height);
@@ -146,7 +147,8 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   lineptr[x] = {col.r_sqrt(), col.g_sqrt(), col.b_sqrt(), 255};
 }
 
-void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std::ptrdiff_t stride)
+void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
+    std::ptrdiff_t stride, unsigned bsize)
 {
   //cudaError_t rc = cudaSuccess;
 
@@ -173,10 +175,9 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std:
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
 
-  printf("allocate\n");
   // Run the kernel with blocks of size bsize*bsize
   {
-    int bsize = 32;
+    //int bsize = 32;
     int w     = std::ceil((float)width / bsize);
     int h     = std::ceil((float)height / bsize);
 
@@ -185,13 +186,13 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns, std:
     dim3 dimBlock(bsize, bsize);
     dim3 dimGrid(w, h);
 
-    printf("random init\n");
+    //random init
     render_init<<<dimBlock, dimGrid>>>(width, height, d_rand_state);
 
     checkCudaErrors(cudaGetLastError());
     checkCudaErrors(cudaDeviceSynchronize());
 
-    printf("raytracing\n");
+    //raytracing;
     mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch, 
         ns, d_camera, d_world, d_rand_state);
 

@@ -35,6 +35,8 @@ __device__ bool triangle::hit(const ray& r, float t_min, float t_max, hit_record
         rec.t = t;
         rec.p = r.point_at_parameter(rec.t);
         vec3 normal_vector = cross(edge1,edge2);
+        // cross product is oriented
+        // normat at point p
         if ((dot(rec.p, normal_vector) / (rec.p.length()*normal_vector.length()))>0)
           rec.normal = rec.p - normal_vector;
         else

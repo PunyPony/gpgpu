@@ -53,38 +53,26 @@ void write_png(const std::byte* buffer,
 
 
 // Usage: ./mandel
-int main(int argc, char** argv)
+int main()
 {
-  (void) argc;
-  (void) argv;
-
   std::string filename = "output.png";
-  //std::string mode = "GPU";
   unsigned width = 1200;
   unsigned height = 600;
   unsigned ns = 100;
+  unsigned bsize=32;
 
-  /*CLI::App app{"mandel"};
-  app.add_option("-o", filename, "Output image");
-  app.add_option("niter", niter, "number of iteration");
-  app.add_option("width", width, "width of the output image");
-  app.add_option("height", height, "height of the output image");
-  app.add_set("-m", mode, {"GPU", "CPU"}, "Either 'GPU' or 'CPU'");
-
-  CLI11_PARSE(app, argc, argv);*/
-
-  // Create buffer
+   // Create buffer
   //constexpr unsigned num_pixels = width * height
   constexpr int kRGBASize = 4;
   int stride = width * kRGBASize;
   auto buffer = std::make_unique<std::byte[]>(height * stride);
 
   // Rendering
-  spdlog::info("Runnging with (w={},h={},ns={}).", width, height, ns);
-  render(reinterpret_cast<char*>(buffer.get()), width, height, ns, stride);
+  //spdlog::info("Runnging with (w={},h={},ns={}).", width, height, ns);
+  render(reinterpret_cast<char*>(buffer.get()), width, height, ns, stride, bsize);
 
   // Save
   write_png(buffer.get(), width, height, stride, filename.c_str());
-  spdlog::info("Output saved in {}.", filename);
+  //spdlog::info("Output saved in {}.", "output.png");
 }
 

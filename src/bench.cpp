@@ -2,39 +2,22 @@
 #include <vector>
 #include <benchmark/benchmark.h>
 
+unsigned width = 1200;
+unsigned height = 600;
+unsigned ns = 100;
 constexpr int kRGBASize = 4;
-constexpr int width = 4800;
-constexpr int height = 3200;
-constexpr int niteration = 1000;
-
-void BM_Rendering_cpu(benchmark::State& st)
-{
-  int stride = width * kRGBASize;
-  std::vector<char> data(height * stride);
-
-  /*for (auto _ : st)
-    render_cpu(data.data(), width, height, stride, niteration);*/
-
-  st.counters["frame_rate"] = benchmark::Counter(st.iterations(), benchmark::Counter::kIsRate);
-}
+int stride = width * kRGBASize;
+auto buffer = std::make_unique<std::byte[]>(height * stride);
 
 void BM_Rendering_gpu(benchmark::State& st)
 {
-  int stride = width * kRGBASize;
-  std::vector<char> data(height * stride);
-
- /* for (auto _ : st)
-    render(data.data(), width, height, stride, niteration);*/
-
+  // Rendering
+  for(auto _:st)
+    render(reinterpret_cast<char*>(buffer.get()), width, height, ns, stride, 32);
   st.counters["frame_rate"] = benchmark::Counter(st.iterations(), benchmark::Counter::kIsRate);
 }
 
-BENCHMARK(BM_Rendering_cpu)
-->Unit(benchmark::kMillisecond)
-->UseRealTime();
-
 BENCHMARK(BM_Rendering_gpu)
-->Unit(benchmark::kMillisecond)
-->UseRealTime();
-
+  ->Unit(benchmark::kMillisecond)
+  ->UseRealTime();
 BENCHMARK_MAIN();
