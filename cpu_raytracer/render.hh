@@ -8,5 +8,5 @@
 
 
 extern void test();
-//extern void  render(std::unique_ptr<std::byte[]>&  buffer,int ny, int nx,int ns );
+void render_cpu(std::unique_ptr<std::byte[]>&  buffer,int ny, int nx,int ns );
 

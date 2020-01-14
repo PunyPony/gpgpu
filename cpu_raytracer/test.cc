@@ -1,6 +1,6 @@
 #include <iostream>
 #include "float.h"
-#include"main.hh"
+#include"render.hh"
 
 
 #include <cstddef>
@@ -16,6 +16,6 @@ int main() {
     int ny = 800;
     int ns = 10;
     auto buffer = std::make_unique< std::byte[]>(ny * nx*4);
-//    render(buffer,ny,nx,ns);  
-    test(); 
+    render(buffer,ny,nx,ns);
+    test();
 }

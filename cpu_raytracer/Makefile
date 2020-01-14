@@ -1,20 +1,21 @@
-CXX = g++
-sources= *.cc
-objects=$(source:.cc =.o)
-rt: main.cc camera.h hitable.h hitable_list.h material.h ray.h sphere.h vec3.h
-	$(CXX)  -std=c++17 -g3 -lpng -o rt main.cc
+.PHONY : clean
 
-libb:$(objects)
-	$(CXX) -shared -std=c++17  -lpng -o libfoo.so
+CXX=g++
+#sources= *.cc
+sources=$(shell echo *.cc)
+objects=$(sources:.cc =.o)
+target=librender_cpu_ref.so
 
 
-out.ppm: rt
-	rm -f out.ppm
-	time ./rt > out.ppm
+rt:
+	$(CXX) -std=c++17 -fPIC -g3 -lpng -o rt $(sources)
 
-out.jpg: out.ppm
-	rm -f out.jpg
-	ppmtojpeg out.ppm > out.jpg
+
+all: $(target)
 
 clean:
-	rm -f rt rt.o out.ppm out.jpg
+	rm -f $(objects) $(target)
+
+$(target) : $(objects)
+	$(CXX) -std=c++17 -fPIC -lpng  $(object) -o $@ -shared
+
