@@ -108,7 +108,7 @@ __device__ vec3 color(const ray& r, hitable **world, curandState *local_rand_sta
     else
       return cur_attenuation;
   }
-  return vec3(0.0,0.0,0.0); // exceeded recursion
+  return vec3(0.0,0.0,0.0); // exceeded recursion, bounces 50 times
 }
 
 __global__ void render_init(int max_x, int max_y, curandState *rand_state) {
@@ -131,6 +131,13 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   if (x >= width || y >= height)
     return;
 
+  extern __shared__  hitable* shared_world[];
+  for (unsigned i=0; i<7;i++)
+    shared_world[i] = world[i];
+  __syncthreads();
+
+  shared_world[0];
+
   uchar4*  lineptr = (uchar4*)(buffer + (height-y) * pitch); //reversed 
 
   curandState local_rand_state = rand_state[y*width + x];
@@ -140,7 +147,7 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
     float u = float(x + curand_uniform(&local_rand_state)) / float(width);
     float v = float(y + curand_uniform(&local_rand_state)) / float(height);
     ray r = (*cam)->get_ray(u,v, &local_rand_state);
-    col += color(r, world, &local_rand_state);
+    col += color(r,shared_world, &local_rand_state);
   }
 
   col = col/float(ns);
@@ -169,11 +176,13 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
   checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
   create_world<<<1,1>>>(d_list,d_world,d_camera, width, height);
 
+  checkCudaErrors(cudaDeviceSynchronize());
+  checkCudaErrors(cudaGetLastError());
+  
   checkCudaErrors(cudaMallocPitch(&devBuffer, &pitch, width *
         sizeof(rgba8_t), height));
 
   checkCudaErrors(cudaGetLastError());
-  checkCudaErrors(cudaDeviceSynchronize());
 
   // Run the kernel with blocks of size bsize*bsize
   {
@@ -193,7 +202,7 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
     checkCudaErrors(cudaDeviceSynchronize());
 
     //raytracing;
-    mykernel<<<dimGrid, dimBlock>>>(devBuffer, width, height, pitch, 
+    mykernel<<<dimGrid, dimBlock, 7*sizeof(hitable *)>>>(devBuffer, width, height, pitch, 
         ns, d_camera, d_world, d_rand_state);
 
     checkCudaErrors(cudaGetLastError());
