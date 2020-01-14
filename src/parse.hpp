@@ -54,7 +54,7 @@ scene parse_obj(std::string file_in)
     else if (type == "Ks")
     {
       std::sscanf(iss.str().c_str(), "%s %f %f %f", &t, &Ks.e[0], &Ks.e[1], &Ks.e[2]);
-      objs.push_back(object(nb_triangle, Kd, Ka, Ks));
+      objs.push_back(object(nb_triangle/3, Kd, Ka, Ks));
     }
     /*else if (type == "vn")
     {
@@ -111,8 +111,6 @@ scene parse_obj(std::string file_in)
   unsigned nb_vtx = v_list.size();
   vec3* vtx_m = new vec3[nb_vtx];
   for (unsigned i = 0; i < nb_vtx; i++) {
-    std::cout << "index : " << i << std::endl;
-    std::cout << "val : " << v_list[i] << std::endl;
     vtx_m[i] = v_list[i];
   }
 
@@ -120,9 +118,10 @@ scene parse_obj(std::string file_in)
   object* objs_m = new object[nb_objs];
   for (unsigned i = 0; i < nb_objs; i++)
   {
-    std::cout << "val : " << objs[i].Ka[0] << std::endl;
     objs_m[i] = objs[i];
   }
+  std::cout << "nb objectss : " << nb_objs << std::endl;
+  std::cout << "nb triangles : " << nb_vtx / 3 << std::endl;
 
   return scene(objs_m, nb_objs, vtx_m, nb_vtx);
 }

@@ -53,12 +53,18 @@ void write_png(const std::byte* buffer,
 
 
 // Usage: ./mandel
-int main()
+int main(int argc, char** argv)
 {
+  if (argc != 2)
+  {
+    std::cout << "Usage : ./ray file.obj" << std::endl;
+    return 0;
+  }
+
   std::string filename = "output.png";
-  unsigned width = 1200;
-  unsigned height = 600;
-  unsigned ns = 100;
+  unsigned width = 600;
+  unsigned height = 300;
+  unsigned ns = 50;
   unsigned bsize=32;
 
    // Create buffer
@@ -69,7 +75,7 @@ int main()
 
   // Rendering
   //spdlog::info("Runnging with (w={},h={},ns={}).", width, height, ns);
-  render(reinterpret_cast<char*>(buffer.get()), width, height, ns, stride, bsize);
+  render(argv[1], reinterpret_cast<char*>(buffer.get()), width, height, ns, stride, bsize);
 
   // Save
   write_png(buffer.get(), width, height, stride, filename.c_str());

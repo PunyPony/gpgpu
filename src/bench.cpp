@@ -15,7 +15,7 @@ static void BM_Rendering_gpu(benchmark::State& st)
 
   // Rendering
   for(auto _:st)
-    render(reinterpret_cast<char*>(buffer.get()), width, height, ns, stride, 32);
+    render("", reinterpret_cast<char*>(buffer.get()), width, height, ns, stride, 32);
   st.counters["frame_rate"] = benchmark::Counter(st.iterations(), benchmark::Counter::kIsRate);
 }
 

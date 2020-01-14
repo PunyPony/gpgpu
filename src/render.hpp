@@ -11,7 +11,7 @@ void check_cuda(cudaError_t result, char const *const func, const char *const fi
 
 #else
 
-void render(char* buffer, unsigned width, unsigned height, 
+void render(char* in_filename, char* buffer, unsigned width, unsigned height, 
     unsigned ns, std::ptrdiff_t stride, unsigned bsize);
 
 void render_cpu(std::unique_ptr<std::byte[]>&  buffer,int ny, int nx,int ns );

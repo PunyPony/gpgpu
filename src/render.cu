@@ -38,29 +38,32 @@ struct rgba8_t {
 __global__ void load_world(object* objs, unsigned nb_objs, vec3* vtx, unsigned nb_vtx,
                            hitable **d_world, camera **d_camera, unsigned width, unsigned height) {
   unsigned i_vtx = 0;
+  hitable **d_list = new hitable*[nb_vtx];
   for (unsigned i = 0; i < nb_objs; i++)
   {
     unsigned nb_triangle = objs[i].nb_triangle;
-    hitable **d_list = new hitable*[nb_triangle];
     for (unsigned t = 0; t < nb_triangle; t++)
     {
-      d_list[t] = new triangle(vtx[i_vtx],
-                               vtx[i_vtx+1],
-                               vtx[i_vtx+2],
-                               new lambertian(vec3(1.0, 0.0, 0.0)));
-      i_vtx += 3;
+      d_list[i_vtx] = new triangle(vtx[i_vtx*3],
+                                   vtx[i_vtx*3+1],
+                                   vtx[i_vtx*3+2],
+                                   new lambertian(objs[i].Ka));
+      //vec3 ch = ((lambertian*)((triangle*)d_list[t])->mat_ptr)->albedo;
+      //printf("Ka : %f %f %f\n", ch[0], ch[1], ch[2]);
+      i_vtx += 1;
     }
-    d_world[i] = new hitable_list(d_list, nb_triangle);
+    printf("Ka : %f %f %f\n", objs[i].Ka[0], objs[i].Ka[1], objs[i].Ka[2]);
   }
+  d_world[0] = new hitable_list(d_list, nb_vtx/3);
 
-        vec3 lookfrom(0, 0, 2);
+        vec3 lookfrom(0, 0, -5);
         vec3 lookat(0,0,0);
         float dist_to_focus = 10.0; (lookfrom-lookat).length();
         float aperture = 0.;
         *d_camera = new camera(lookfrom,
                                  lookat,
                                  vec3(0,1,0),
-                                 100.0,
+                                 70.0,
                                  float(width)/float(height),
                                  aperture,
                                  dist_to_focus);
@@ -108,7 +111,7 @@ __global__ void create_world(unsigned nb_objs, hitable **d_world, camera
 }
 
 __global__ void free_world(unsigned nb_objs, hitable **d_world, camera **d_camera) {
-    for (unsigned obj = 0; obj < nb_objs; obj++)
+    for (unsigned obj = 0; obj < 1; obj++)
     {
       hitable_list *d_obj = (hitable_list*)d_world[obj];
       hitable **d_list = d_obj->list;
@@ -169,12 +172,12 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
   if (x >= width || y >= height)
     return;
 
-  extern __shared__  hitable* shared_world[];
+  /*extern __shared__  hitable* shared_world[];
   for (unsigned i=0; i<7;i++)
     shared_world[i] = world[i];
   __syncthreads();
 
-  shared_world[0];
+  shared_world[0];*/
 
   uchar4*  lineptr = (uchar4*)(buffer + (height-y) * pitch); //reversed 
 
@@ -185,14 +188,14 @@ __global__ void mykernel(char* buffer, int width, int height, size_t pitch,
     float u = float(x + curand_uniform(&local_rand_state)) / float(width);
     float v = float(y + curand_uniform(&local_rand_state)) / float(height);
     ray r = (*cam)->get_ray(u,v, &local_rand_state);
-    col += color(r,shared_world, &local_rand_state);
+    col += color(r,world, &local_rand_state);
   }
 
   col = col/float(ns);
   lineptr[x] = {col.r_sqrt(), col.g_sqrt(), col.b_sqrt(), 255};
 }
 
-void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
+void render(char* in_filename, char* hostBuffer, unsigned width, unsigned height, unsigned ns,
     std::ptrdiff_t stride, unsigned bsize)
 {
   //cudaError_t rc = cudaSuccess;
@@ -206,18 +209,24 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
   checkCudaErrors(cudaMalloc((void **)&d_rand_state, width*height*sizeof(curandState)));
 
   // make our world of hitables & the camera
-  /*scene scene1 = parse_obj("tests/lighthouse.svati");
-  unsigned nb_objs = scene1.nb_objs;
-  unsigned nb_vtx = scene1.nb_vtx;*/
-
   unsigned nb_objs = 1;
+  unsigned nb_vtx = 0;
   hitable **d_world;
   checkCudaErrors(cudaMalloc((void **)&d_world, nb_objs*sizeof(hitable *)));
   camera **d_camera;
   checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-  create_world<<<1,1>>>(nb_objs,d_world,d_camera, width, height);
 
-  /*object *objs_cuda;
+  if (std::string(in_filename) == "")
+  {
+    create_world<<<1,1>>>(nb_objs,d_world,d_camera, width, height);
+  }
+  else
+  {
+  scene scene1 = parse_obj(in_filename);
+  nb_objs = scene1.nb_objs;
+  nb_vtx = scene1.nb_vtx;
+
+  object *objs_cuda;
   checkCudaErrors(cudaMalloc((void **)&objs_cuda, nb_objs*sizeof(object)));
   checkCudaErrors(cudaMemcpy(objs_cuda, scene1.objs_m, nb_objs*sizeof(object), cudaMemcpyHostToDevice));
   vec3 *vtx_cuda;
@@ -227,11 +236,11 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
   delete scene1.vtx_m;
   load_world<<<1,1>>>(objs_cuda, nb_objs, vtx_cuda, nb_vtx,
                       d_world, d_camera, width, height);
-
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaFree(objs_cuda));
-  checkCudaErrors(cudaFree(vtx_cuda));*/
+  checkCudaErrors(cudaFree(vtx_cuda));
+  }
 
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaGetLastError());
@@ -259,7 +268,7 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
     checkCudaErrors(cudaDeviceSynchronize());
 
     //raytracing;
-    mykernel<<<dimGrid, dimBlock, nb_objs*sizeof(hitable *)>>>(devBuffer, width, height, pitch, 
+    mykernel<<<dimGrid, dimBlock, 1*sizeof(hitable *)>>>(devBuffer, width, height, pitch, 
         ns, d_camera, d_world, d_rand_state);
 
     checkCudaErrors(cudaGetLastError());
