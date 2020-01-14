@@ -1,5 +1,6 @@
 #pragma once
 struct hit_record;
+#include <curand_kernel.h>
 
 #include "ray.hpp"
 #include "hitable.hpp"

@@ -6,10 +6,13 @@ class sphere: public hitable  {
         __device__ sphere() {}
         __device__ sphere(vec3 cen, float r, material *m) : center(cen), radius(r), mat_ptr(m)  {};
         __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
+        __device__ virtual material* get_mat_ptr() const;
         vec3 center;
         float radius;
         material *mat_ptr;
 };
+
+__device__ material* sphere::get_mat_ptr() const { return mat_ptr; }
 
 __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
     vec3 oc = r.origin() - center;

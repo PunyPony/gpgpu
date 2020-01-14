@@ -6,12 +6,15 @@ class triangle: public hitable  {
         __device__ triangle() {}
         __device__ triangle(vec3 v0, vec3 v1,vec3 v2, material *m) : v0(v0), v1(v1),v2(v2), mat_ptr(m)  {};
         __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
+        __device__ virtual material* get_mat_ptr() const;
         vec3 v0;
         vec3 v1;
         vec3 v2;
 
         material *mat_ptr;
 };
+
+__device__ material* triangle::get_mat_ptr() const { return mat_ptr; }
 
 __device__ bool triangle::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
 

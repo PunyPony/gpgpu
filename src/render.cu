@@ -1,21 +1,22 @@
-#include "render.hpp"
 #include <spdlog/spdlog.h>
-#include <cassert>
+#include <curand_kernel.h>
 #include <iostream>
+#include <cassert>
 #include <stdio.h>
 #include <time.h>
 #include <float.h>
+
+#include "hitable.hpp"
+#include "render.hpp"
 #include "vec.hpp"
 #include "ray.hpp"
-#include "sphere.hpp"
-#include "camera.hpp"
 #include "hitable_list.hpp"
-#include <curand_kernel.h>
+#include "camera.hpp"
+#include "sphere.hpp"
+#include "triangle.hpp"
 #include "material.hpp"
-# include "triangle.hpp"
+#include "parse.hpp"
 
-#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
-#define abortError(msg) _abortError(msg, __FUNCTION__, __LINE__)
 void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line) {
   if (result) {
     std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
@@ -34,9 +35,41 @@ struct rgba8_t {
   std::uint8_t a;
 };
 
-__global__ void create_world(hitable **d_list, hitable **d_world, camera
+__global__ void load_world(object* objs, unsigned nb_objs, vec3* vtx, unsigned nb_vtx,
+                           hitable **d_world, camera **d_camera, unsigned width, unsigned height) {
+  unsigned i_vtx = 0;
+  for (unsigned i = 0; i < nb_objs; i++)
+  {
+    unsigned nb_triangle = objs[i].nb_triangle;
+    hitable **d_list = new hitable*[nb_triangle];
+    for (unsigned t = 0; t < nb_triangle; t++)
+    {
+      d_list[t] = new triangle(vtx[i_vtx],
+                               vtx[i_vtx+1],
+                               vtx[i_vtx+2],
+                               new lambertian(vec3(1.0, 0.0, 0.0)));
+      i_vtx += 3;
+    }
+    d_world[i] = new hitable_list(d_list, nb_triangle);
+  }
+
+        vec3 lookfrom(0, 0, 2);
+        vec3 lookat(0,0,0);
+        float dist_to_focus = 10.0; (lookfrom-lookat).length();
+        float aperture = 0.;
+        *d_camera = new camera(lookfrom,
+                                 lookat,
+                                 vec3(0,1,0),
+                                 100.0,
+                                 float(width)/float(height),
+                                 aperture,
+                                 dist_to_focus);
+}
+
+__global__ void create_world(unsigned nb_objs, hitable **d_world, camera
     **d_camera, unsigned width, unsigned height) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
+        hitable **d_list = new hitable*[8];
         d_list[0] = new sphere(vec3(0,0,0), 0.5,
                                 new lambertian(vec3(0.1, 0.2, 0.5)));
         d_list[1] = new sphere(vec3(0,-100.5,0), 100,
@@ -74,16 +107,21 @@ __global__ void create_world(hitable **d_list, hitable **d_world, camera
     }
 }
 
-__global__ void free_world(hitable **d_list, hitable **d_world, camera **d_camera) {
-    for(int i=0; i < 5; i++) {
-        delete ((sphere *)d_list[i])->mat_ptr;
+__global__ void free_world(unsigned nb_objs, hitable **d_world, camera **d_camera) {
+    for (unsigned obj = 0; obj < nb_objs; obj++)
+    {
+      hitable_list *d_obj = (hitable_list*)d_world[obj];
+      hitable **d_list = d_obj->list;
+      for(int i = 0; i < d_obj->list_size; i++) {
+        //delete ((triangle *)d_list[i])->mat_ptr;
+        delete d_list[i]->get_mat_ptr();
         delete d_list[i];
+      }
+      delete d_obj->list;
+      delete d_world[obj];
     }
-    for(int i=5; i < 7; i++) {
-        delete ((triangle *)d_list[i])->mat_ptr;
-        delete d_list[i];
-    }
-    delete *d_world;
+
+
     delete *d_camera;
 }
 
@@ -168,13 +206,32 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
   checkCudaErrors(cudaMalloc((void **)&d_rand_state, width*height*sizeof(curandState)));
 
   // make our world of hitables & the camera
-  hitable **d_list;
-  checkCudaErrors(cudaMalloc((void **)&d_list, 7*sizeof(hitable *)));
+  /*scene scene1 = parse_obj("tests/lighthouse.svati");
+  unsigned nb_objs = scene1.nb_objs;
+  unsigned nb_vtx = scene1.nb_vtx;*/
+
+  unsigned nb_objs = 1;
   hitable **d_world;
-  checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
+  checkCudaErrors(cudaMalloc((void **)&d_world, nb_objs*sizeof(hitable *)));
   camera **d_camera;
   checkCudaErrors(cudaMalloc((void **)&d_camera, sizeof(camera *)));
-  create_world<<<1,1>>>(d_list,d_world,d_camera, width, height);
+  create_world<<<1,1>>>(nb_objs,d_world,d_camera, width, height);
+
+  /*object *objs_cuda;
+  checkCudaErrors(cudaMalloc((void **)&objs_cuda, nb_objs*sizeof(object)));
+  checkCudaErrors(cudaMemcpy(objs_cuda, scene1.objs_m, nb_objs*sizeof(object), cudaMemcpyHostToDevice));
+  vec3 *vtx_cuda;
+  checkCudaErrors(cudaMalloc((void **)&vtx_cuda, nb_vtx*sizeof(vec3)));
+  checkCudaErrors(cudaMemcpy(vtx_cuda, scene1.vtx_m, nb_vtx*sizeof(vec3), cudaMemcpyHostToDevice));
+  delete scene1.objs_m;
+  delete scene1.vtx_m;
+  load_world<<<1,1>>>(objs_cuda, nb_objs, vtx_cuda, nb_vtx,
+                      d_world, d_camera, width, height);
+
+  checkCudaErrors(cudaGetLastError());
+  checkCudaErrors(cudaDeviceSynchronize());
+  checkCudaErrors(cudaFree(objs_cuda));
+  checkCudaErrors(cudaFree(vtx_cuda));*/
 
   checkCudaErrors(cudaDeviceSynchronize());
   checkCudaErrors(cudaGetLastError());
@@ -202,7 +259,7 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
     checkCudaErrors(cudaDeviceSynchronize());
 
     //raytracing;
-    mykernel<<<dimGrid, dimBlock, 7*sizeof(hitable *)>>>(devBuffer, width, height, pitch, 
+    mykernel<<<dimGrid, dimBlock, nb_objs*sizeof(hitable *)>>>(devBuffer, width, height, pitch, 
         ns, d_camera, d_world, d_rand_state);
 
     checkCudaErrors(cudaGetLastError());
@@ -215,13 +272,12 @@ void render(char* hostBuffer, unsigned width, unsigned height, unsigned ns,
   // Free
   checkCudaErrors(cudaDeviceSynchronize()); // ?
 
-  free_world<<<1,1>>>(d_list,d_world,d_camera);
+  free_world<<<1,1>>>(nb_objs,d_world,d_camera);
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaFree(devBuffer));
   checkCudaErrors(cudaGetLastError());
   checkCudaErrors(cudaFree(d_camera));
   checkCudaErrors(cudaFree(d_world));
-  checkCudaErrors(cudaFree(d_list));
   checkCudaErrors(cudaFree(d_rand_state));
 
   // useful for cuda-memcheck --leak-check full
