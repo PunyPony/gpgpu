@@ -120,8 +120,8 @@ scene parse_obj(std::string file_in)
   {
     objs_m[i] = objs[i];
   }
-  std::cout << "nb objectss : " << nb_objs << std::endl;
-  std::cout << "nb triangles : " << nb_vtx / 3 << std::endl;
+  //std::cout << "nb objectss : " << nb_objs << std::endl;
+  //std::cout << "nb triangles : " << nb_vtx / 3 << std::endl;
 
   return scene(objs_m, nb_objs, vtx_m, nb_vtx);
 }

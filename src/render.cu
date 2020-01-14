@@ -56,7 +56,7 @@ __global__ void load_world(object* objs, unsigned nb_objs, vec3* vtx, unsigned n
   }
   d_world[0] = new hitable_list(d_list, nb_vtx/3);
 
-        vec3 lookfrom(0, 0, -5);
+        vec3 lookfrom(0, 0, -8);
         vec3 lookat(0,0,0);
         float dist_to_focus = 10.0; (lookfrom-lookat).length();
         float aperture = 0.;
