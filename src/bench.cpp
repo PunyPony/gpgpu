@@ -27,11 +27,11 @@ static void BM_Rendering_cpu(benchmark::State& st)
 }
 
 
-BENCHMARK(BM_Rendering_gpu);
+BENCHMARK(BM_Rendering_gpu)
   ->Unit(benchmark::kMillisecond)
   ->UseRealTime();
 
-BENCHMARK(BM_Rendering_cpu);
+BENCHMARK(BM_Rendering_cpu)
   ->Unit(benchmark::kMillisecond)
   ->UseRealTime();
 
