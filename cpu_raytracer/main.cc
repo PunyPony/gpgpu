@@ -15,10 +15,10 @@
 
 //#include <CLI/CLI.hpp>
 //#include <spdlog/spdlog.h>
+void test() {
+  printf("test"); 
 
-
-
-
+ }
 
 
 vec3 color(const ray& r, hitable *world, int depth) {
@@ -127,11 +127,7 @@ void write_png(const std::byte* buffer,
 
 
 
-void  render(std::byte[]  buffer ) {
-    int nx = 1200;
-    int ny = 800;
-    int ns = 10;
-
+void  render(std::unique_ptr<std::byte[]>&  buffer,int ny, int nx,int ns ) {
 
     hitable **list = new hitable *[7];
 
@@ -152,23 +148,16 @@ void  render(std::byte[]  buffer ) {
             }
             col /= float(ns);
             col = vec3( sqrt(col[0]), sqrt(col[1]), sqrt(col[2]) );
-            auto ir = int(255.99*col[0]);
-            auto ig = int(255.99*col[1]);
-            auto ib = int(255.99*col[2]);
+            auto ir = uint8_t(255.99*col[0]);
+            auto ig = uint8_t(255.99*col[1]);
+            auto ib = uint8_t(255.99*col[2]);
             buffer[j*nx+ i*4+0] = std::byte{ir};
             buffer[j*nx+ i*4 + 1] = std::byte{ig};
             buffer[j*nx+ i*4 + 2] = std::byte{ib};
             buffer[j*nx+ i*4 +3] = std::byte{255};
        }
     }
-  return buffer
 }
 
 
 
-
-int main() {
-
-  auto buffer = std::make_unique< std::byte[]>(ny * stride);
-  render(buffer);   
-}
